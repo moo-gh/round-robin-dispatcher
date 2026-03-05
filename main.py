@@ -24,13 +24,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Request Dispatcher API",
-    description="A round-robin load balancer API that processes requests only once",
+    description=(
+        "A round-robin load balancer API that processes requests only once"
+    ),
     version="1.0.0",
     lifespan=lifespan,
 )
 
 
-# Request models
 class ProcessRequestBody(BaseModel):
     request_id: str
     payload: Dict[str, Any]
