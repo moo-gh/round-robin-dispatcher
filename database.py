@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from models import Base
 
 
-# Using SQLite for simplicity
+
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dispatcher.db")
 
 engine = create_engine(
