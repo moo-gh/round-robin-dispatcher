@@ -1,13 +1,14 @@
 import random
 import asyncio
 import threading
-from typing import Dict
+from typing import Dict, Optional
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from models import ProcessedRequest
 from cache import request_cache
+from database import SessionLocal
 
 
 class WorkerManager:
@@ -39,75 +40,84 @@ class WorkerManager:
         with self.lock:
             return self.worker_status.copy()
 
-    async def process_request(self, db: Session, request_record: ProcessedRequest):
-        """Simulate processing a request with a worker"""
-        worker_id = request_record.worker_id
+    async def process_request(self, request_id: str) -> None:
+        """
+        Simulate processing a request with a worker.
 
-        # Log that worker has started processing
-        print(f"Worker {worker_id} started request {request_record.request_id}")
-
+        Uses a dedicated DB session so work continues after the HTTP request
+        closes the dependency-injected session.
+        """
+        db: Session = SessionLocal()
+        worker_id: Optional[int] = None
         try:
-            # Mark worker as busy
-            self.set_worker_busy(worker_id)
-            db.commit()
-
-            # Update cache with new status
-            cache_data = {
-                "worker_id": request_record.worker_id,
-                "created_at": request_record.created_at.isoformat(),
-                "payload": request_record.get_payload(),
-            }
-            request_cache.set(request_record.request_id, cache_data)
-
-            # Simulate work (1-10 seconds)
-            processing_time = random.randint(1, 10)
-            await asyncio.sleep(processing_time)
-
-            # fill the result with useful information
-            result = {
-                "processed_by": f"worker_{worker_id}",
-                "processing_time": processing_time,
-                "processed_at": datetime.utcnow().isoformat(),
-                "original_payload": request_record.get_payload(),
-                "result": f"Successfully processed request {request_record.request_id}",
-            }
-
-            # Update request with result
-            request_record.set_result(result)
-            db.commit()
-
-            # Update cache with completion status
-            cache_data = {
-                "worker_id": request_record.worker_id,
-                "created_at": request_record.created_at.isoformat(),
-                "payload": request_record.get_payload(),
-                "result": result,
-            }
-            request_cache.set(request_record.request_id, cache_data)
-
-            print(f"Worker {worker_id} completed request {request_record.request_id}")
-
-        except Exception as e:
-            # Handle processing error
-            request_record.set_result({"error": str(e)})
-            db.commit()
-
-            # Update cache with failure status
-            cache_data = {
-                "worker_id": request_record.worker_id,
-                "created_at": request_record.created_at.isoformat(),
-                "payload": request_record.get_payload(),
-                "error": str(e),
-            }
-            request_cache.set(request_record.request_id, cache_data)
-
-            print(
-                f"Worker {worker_id} failed to process request {request_record.request_id}: {e}"
+            request_record = (
+                db.query(ProcessedRequest)
+                .filter(ProcessedRequest.request_id == request_id)
+                .first()
             )
+            if request_record is None:
+                print(f"No DB row for request_id={request_id}, skipping background work")
+                return
 
+            worker_id = request_record.worker_id
+            print(f"Worker {worker_id} started request {request_record.request_id}")
+
+            try:
+                self.set_worker_busy(worker_id)
+                db.commit()
+
+                cache_data = {
+                    "worker_id": request_record.worker_id,
+                    "created_at": request_record.created_at.isoformat(),
+                    "payload": request_record.get_payload(),
+                }
+                request_cache.set(request_record.request_id, cache_data)
+
+                processing_time = random.randint(1, 10)
+                await asyncio.sleep(processing_time)
+
+                result = {
+                    "processed_by": f"worker_{worker_id}",
+                    "processing_time": processing_time,
+                    "processed_at": datetime.utcnow().isoformat(),
+                    "original_payload": request_record.get_payload(),
+                    "result": f"Successfully processed request {request_record.request_id}",
+                }
+
+                request_record.set_result(result)
+                db.commit()
+
+                cache_data = {
+                    "worker_id": request_record.worker_id,
+                    "created_at": request_record.created_at.isoformat(),
+                    "payload": request_record.get_payload(),
+                    "result": result,
+                }
+                request_cache.set(request_record.request_id, cache_data)
+
+                print(f"Worker {worker_id} completed request {request_record.request_id}")
+
+            except Exception as e:
+                request_record.set_result({"error": str(e)})
+                db.commit()
+
+                cache_data = {
+                    "worker_id": request_record.worker_id,
+                    "created_at": request_record.created_at.isoformat(),
+                    "payload": request_record.get_payload(),
+                    "error": str(e),
+                }
+                request_cache.set(request_record.request_id, cache_data)
+
+                print(
+                    f"Worker {worker_id} failed to process request {request_record.request_id}: {e}"
+                )
+
+            finally:
+                if worker_id is not None:
+                    self.set_worker_free(worker_id)
         finally:
-            # Mark worker as free
-            self.set_worker_free(worker_id)
+            db.close()
 
 
 # Global worker manager instance

@@ -2,7 +2,7 @@ from typing import Dict, Any
 from cache import request_cache
 from contextlib import asynccontextmanager
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from fastapi import FastAPI, Depends, BackgroundTasks
 
@@ -17,7 +17,9 @@ async def lifespan(app: FastAPI):
     # Startup
     create_tables()
     print("Database tables created successfully")
-    print("Starting Request Dispatcher API with 3 workers")
+    print(
+        f"Starting Request Dispatcher API with {worker_manager.num_workers} workers"
+    )
     yield
     # Shutdown (if needed)
 
@@ -33,7 +35,7 @@ app = FastAPI(
 
 
 class ProcessRequestBody(BaseModel):
-    request_id: str
+    request_id: str = Field(..., min_length=1)
     payload: Dict[str, Any]
 
 
@@ -116,7 +118,7 @@ async def process_request(
         request_cache.set(request_id, cache_data)
 
         # Process request in background
-        background_tasks.add_task(worker_manager.process_request, db, new_request)
+        background_tasks.add_task(worker_manager.process_request, request_id)
 
         return ProcessRequestResponse(
             message="Request queued for processing",

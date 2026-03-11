@@ -2,7 +2,7 @@ from fastapi import HTTPException
 
 
 def create_conflict_exception(
-    request_id: str,    
+    request_id: str,
     worker_id: int,
     created_at: str,
     source: str = "unknown"
