@@ -1,8 +1,8 @@
-from typing import Dict, Any
+from typing import Any, Dict
 from cache import request_cache
 from contextlib import asynccontextmanager
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from fastapi import FastAPI, Depends, BackgroundTasks
 
@@ -38,12 +38,24 @@ class ProcessRequestBody(BaseModel):
     request_id: str = Field(..., min_length=1)
     payload: Dict[str, Any]
 
+    @field_validator("request_id", mode="before")
+    @classmethod
+    def strip_request_id(cls, v: object) -> object:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
 
 class ProcessRequestResponse(BaseModel):
     message: str
     request_id: str
     worker_id: int
     created_at: str
+
+
+@app.get("/health")
+async def health() -> Dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.post("/process-request", response_model=ProcessRequestResponse)
