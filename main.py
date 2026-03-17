@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, NoReturn
 from cache import request_cache
 from contextlib import asynccontextmanager
 
@@ -11,6 +11,26 @@ from models import ProcessedRequest
 from worker_manager import worker_manager
 from database import get_db, create_tables
 from utils import create_conflict_exception, create_server_error_exception
+
+
+def _cache_data_from_row(row: ProcessedRequest) -> Dict[str, Any]:
+    return {
+        "worker_id": row.worker_id,
+        "created_at": row.created_at.isoformat(),
+        "payload": row.get_payload(),
+    }
+
+
+def _remember_row_and_conflict(
+    request_id: str, row: ProcessedRequest, source: str
+) -> NoReturn:
+    request_cache.set(request_id, _cache_data_from_row(row))
+    raise create_conflict_exception(
+        request_id=request_id,
+        worker_id=row.worker_id,
+        created_at=row.created_at.isoformat(),
+        source=source,
+    )
 
 
 @asynccontextmanager
@@ -91,21 +111,7 @@ async def process_request(
     )
 
     if existing_request:
-        # Request found in database, add to cache for future lookups
-        cache_data = {
-            "worker_id": existing_request.worker_id,
-            "created_at": existing_request.created_at.isoformat(),
-            "payload": existing_request.get_payload(),
-        }
-        request_cache.set(request_id, cache_data)
-
-        # Return existing record info
-        raise create_conflict_exception(
-            request_id=request_id,
-            worker_id=existing_request.worker_id,
-            created_at=existing_request.created_at.isoformat(),
-            source="database"
-        )
+        _remember_row_and_conflict(request_id, existing_request, "database")
 
     # Get next worker using round-robin
     worker_id = worker_manager.get_next_worker()
@@ -122,13 +128,7 @@ async def process_request(
         db.commit()
         db.refresh(new_request)
 
-        # Add to cache for fast future lookups
-        cache_data = {
-            "worker_id": new_request.worker_id,
-            "created_at": new_request.created_at.isoformat(),
-            "payload": new_request.get_payload(),
-        }
-        request_cache.set(request_id, cache_data)
+        request_cache.set(request_id, _cache_data_from_row(new_request))
 
         # Process request in background
         background_tasks.add_task(worker_manager.process_request, request_id)
@@ -151,18 +151,7 @@ async def process_request(
             raise create_server_error_exception(
                 "Failed to queue request: unique constraint violation"
             )
-        cache_data = {
-            "worker_id": winner.worker_id,
-            "created_at": winner.created_at.isoformat(),
-            "payload": winner.get_payload(),
-        }
-        request_cache.set(request_id, cache_data)
-        raise create_conflict_exception(
-            request_id=request_id,
-            worker_id=winner.worker_id,
-            created_at=winner.created_at.isoformat(),
-            source="database",
-        )
+        _remember_row_and_conflict(request_id, winner, "database")
 
     except Exception as e:
         db.rollback()
