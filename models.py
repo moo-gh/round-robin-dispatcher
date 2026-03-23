@@ -1,8 +1,9 @@
 import json
 from datetime import datetime
+from typing import Any, Dict
 
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
@@ -32,3 +33,13 @@ class ProcessedRequest(Base):
     def get_result(self):
         """Convert JSON string back to dict"""
         return json.loads(self.result) if self.result else {}
+
+    def cache_dict(self, **extra: Any) -> Dict[str, Any]:
+        """Common shape for in-memory cache entries (optional extra keys merged in)."""
+        data: Dict[str, Any] = {
+            "worker_id": self.worker_id,
+            "created_at": self.created_at.isoformat(),
+            "payload": self.get_payload(),
+        }
+        data.update(extra)
+        return data

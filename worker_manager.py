@@ -66,12 +66,9 @@ class WorkerManager:
                 self.set_worker_busy(worker_id)
                 db.commit()
 
-                cache_data = {
-                    "worker_id": request_record.worker_id,
-                    "created_at": request_record.created_at.isoformat(),
-                    "payload": request_record.get_payload(),
-                }
-                request_cache.set(request_record.request_id, cache_data)
+                request_cache.set(
+                    request_record.request_id, request_record.cache_dict()
+                )
 
                 processing_time = random.randint(1, 10)
                 await asyncio.sleep(processing_time)
@@ -87,13 +84,9 @@ class WorkerManager:
                 request_record.set_result(result)
                 db.commit()
 
-                cache_data = {
-                    "worker_id": request_record.worker_id,
-                    "created_at": request_record.created_at.isoformat(),
-                    "payload": request_record.get_payload(),
-                    "result": result,
-                }
-                request_cache.set(request_record.request_id, cache_data)
+                request_cache.set(
+                    request_record.request_id, request_record.cache_dict(result=result)
+                )
 
                 print(f"Worker {worker_id} completed request {request_record.request_id}")
 
@@ -101,13 +94,10 @@ class WorkerManager:
                 request_record.set_result({"error": str(e)})
                 db.commit()
 
-                cache_data = {
-                    "worker_id": request_record.worker_id,
-                    "created_at": request_record.created_at.isoformat(),
-                    "payload": request_record.get_payload(),
-                    "error": str(e),
-                }
-                request_cache.set(request_record.request_id, cache_data)
+                request_cache.set(
+                    request_record.request_id,
+                    request_record.cache_dict(error=str(e)),
+                )
 
                 print(
                     f"Worker {worker_id} failed to process request {request_record.request_id}: {e}"

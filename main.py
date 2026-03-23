@@ -13,18 +13,10 @@ from database import get_db, create_tables
 from utils import create_conflict_exception, create_server_error_exception
 
 
-def _cache_data_from_row(row: ProcessedRequest) -> Dict[str, Any]:
-    return {
-        "worker_id": row.worker_id,
-        "created_at": row.created_at.isoformat(),
-        "payload": row.get_payload(),
-    }
-
-
 def _remember_row_and_conflict(
     request_id: str, row: ProcessedRequest, source: str
 ) -> NoReturn:
-    request_cache.set(request_id, _cache_data_from_row(row))
+    request_cache.set(request_id, row.cache_dict())
     raise create_conflict_exception(
         request_id=request_id,
         worker_id=row.worker_id,
@@ -128,7 +120,7 @@ async def process_request(
         db.commit()
         db.refresh(new_request)
 
-        request_cache.set(request_id, _cache_data_from_row(new_request))
+        request_cache.set(request_id, new_request.cache_dict())
 
         # Process request in background
         background_tasks.add_task(worker_manager.process_request, request_id)
