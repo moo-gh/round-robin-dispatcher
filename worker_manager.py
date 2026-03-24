@@ -4,8 +4,6 @@ import threading
 from typing import Dict, Optional
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
-
 from models import ProcessedRequest
 from cache import request_cache
 from database import SessionLocal
@@ -47,9 +45,8 @@ class WorkerManager:
         Uses a dedicated DB session so work continues after the HTTP request
         closes the dependency-injected session.
         """
-        db: Session = SessionLocal()
         worker_id: Optional[int] = None
-        try:
+        with SessionLocal() as db:
             request_record = (
                 db.query(ProcessedRequest)
                 .filter(ProcessedRequest.request_id == request_id)
@@ -60,15 +57,12 @@ class WorkerManager:
                 return
 
             worker_id = request_record.worker_id
-            print(f"Worker {worker_id} started request {request_record.request_id}")
+            print(f"Worker {worker_id} started request {request_id}")
 
             try:
                 self.set_worker_busy(worker_id)
-                db.commit()
 
-                request_cache.set(
-                    request_record.request_id, request_record.cache_dict()
-                )
+                request_cache.set(request_id, request_record.cache_dict())
 
                 processing_time = random.randint(1, 10)
                 await asyncio.sleep(processing_time)
@@ -78,36 +72,32 @@ class WorkerManager:
                     "processing_time": processing_time,
                     "processed_at": datetime.now(timezone.utc).isoformat(),
                     "original_payload": request_record.get_payload(),
-                    "result": f"Successfully processed request {request_record.request_id}",
+                    "result": f"Successfully processed request {request_id}",
                 }
 
                 request_record.set_result(result)
                 db.commit()
 
-                request_cache.set(
-                    request_record.request_id, request_record.cache_dict(result=result)
-                )
+                request_cache.set(request_id, request_record.cache_dict(result=result))
 
-                print(f"Worker {worker_id} completed request {request_record.request_id}")
+                print(f"Worker {worker_id} completed request {request_id}")
 
             except Exception as e:
                 request_record.set_result({"error": str(e)})
                 db.commit()
 
                 request_cache.set(
-                    request_record.request_id,
+                    request_id,
                     request_record.cache_dict(error=str(e)),
                 )
 
                 print(
-                    f"Worker {worker_id} failed to process request {request_record.request_id}: {e}"
+                    f"Worker {worker_id} failed to process request {request_id}: {e}"
                 )
 
             finally:
                 if worker_id is not None:
                     self.set_worker_free(worker_id)
-        finally:
-            db.close()
 
 
 # Global worker manager instance
