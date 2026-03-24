@@ -1,11 +1,16 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
+
+
+def _utc_now_naive() -> datetime:
+    """Naive UTC wall time, matching legacy datetime.utcnow() storage semantics."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class ProcessedRequest(Base):
@@ -16,11 +21,11 @@ class ProcessedRequest(Base):
     payload = Column(Text, nullable=False)
     worker_id = Column(Integer, nullable=False)
     result = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utc_now_naive)
 
     @staticmethod
     def _encode_dict(data: Dict[str, Any]) -> str:
-        return json.dumps(data)
+        return json.dumps(data, ensure_ascii=False)
 
     @staticmethod
     def _decode_json(text: Optional[str]) -> Dict[str, Any]:
