@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import declarative_base
@@ -18,21 +18,29 @@ class ProcessedRequest(Base):
     result = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    def set_payload(self, payload_dict):
+    @staticmethod
+    def _encode_dict(data: Dict[str, Any]) -> str:
+        return json.dumps(data)
+
+    @staticmethod
+    def _decode_json(text: Optional[str]) -> Dict[str, Any]:
+        return json.loads(text) if text else {}
+
+    def set_payload(self, payload_dict: Dict[str, Any]) -> None:
         """Convert dict to JSON string for storage"""
-        self.payload = json.dumps(payload_dict)
+        self.payload = self._encode_dict(payload_dict)
 
-    def get_payload(self):
+    def get_payload(self) -> Dict[str, Any]:
         """Convert JSON string back to dict"""
-        return json.loads(self.payload) if self.payload else {}
+        return self._decode_json(self.payload)
 
-    def set_result(self, result_dict):
+    def set_result(self, result_dict: Dict[str, Any]) -> None:
         """Convert dict to JSON string for storage"""
-        self.result = json.dumps(result_dict)
+        self.result = self._encode_dict(result_dict)
 
-    def get_result(self):
+    def get_result(self) -> Dict[str, Any]:
         """Convert JSON string back to dict"""
-        return json.loads(self.result) if self.result else {}
+        return self._decode_json(self.result)
 
     def cache_dict(self, **extra: Any) -> Dict[str, Any]:
         """Common shape for in-memory cache entries (optional extra keys merged in)."""
