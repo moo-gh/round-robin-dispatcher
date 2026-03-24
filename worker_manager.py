@@ -4,6 +4,8 @@ import threading
 from typing import Dict, Optional
 from datetime import datetime, timezone
 
+from sqlalchemy import select
+
 from models import ProcessedRequest
 from cache import request_cache
 from database import SessionLocal
@@ -47,11 +49,10 @@ class WorkerManager:
         """
         worker_id: Optional[int] = None
         with SessionLocal() as db:
-            request_record = (
-                db.query(ProcessedRequest)
-                .filter(ProcessedRequest.request_id == request_id)
-                .first()
+            stmt = select(ProcessedRequest).where(
+                ProcessedRequest.request_id == request_id
             )
+            request_record = db.scalars(stmt).first()
             if request_record is None:
                 print(f"No DB row for request_id={request_id}, skipping background work")
                 return
