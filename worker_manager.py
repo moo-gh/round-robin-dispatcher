@@ -2,7 +2,7 @@ import random
 import asyncio
 import threading
 from typing import Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -25,12 +25,12 @@ class WorkerManager:
             self.current_worker = (self.current_worker + 1) % self.num_workers
             return worker_id
 
-    def set_worker_busy(self, worker_id: int):
+    def set_worker_busy(self, worker_id: int) -> None:
         """Mark worker as busy"""
         with self.lock:
             self.worker_status[worker_id] = "busy"
 
-    def set_worker_free(self, worker_id: int):
+    def set_worker_free(self, worker_id: int) -> None:
         """Mark worker as free"""
         with self.lock:
             self.worker_status[worker_id] = "free"
@@ -76,7 +76,7 @@ class WorkerManager:
                 result = {
                     "processed_by": f"worker_{worker_id}",
                     "processing_time": processing_time,
-                    "processed_at": datetime.utcnow().isoformat(),
+                    "processed_at": datetime.now(timezone.utc).isoformat(),
                     "original_payload": request_record.get_payload(),
                     "result": f"Successfully processed request {request_record.request_id}",
                 }
