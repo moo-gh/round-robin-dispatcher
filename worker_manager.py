@@ -13,6 +13,8 @@ from database import SessionLocal
 
 class WorkerManager:
     def __init__(self, num_workers: int = 3):
+        if num_workers < 1:
+            raise ValueError("num_workers must be at least 1")
         self.num_workers = num_workers
         self.current_worker = 0
         self.lock = threading.Lock()
