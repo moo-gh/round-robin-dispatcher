@@ -3,6 +3,7 @@ from cache import request_cache
 from contextlib import asynccontextmanager
 
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from fastapi import FastAPI, Depends, BackgroundTasks
@@ -96,11 +97,10 @@ async def process_request(
         )
 
     # Second-level check: Look in database if not found in cache
-    existing_request = (
-        db.query(ProcessedRequest)
-        .filter(ProcessedRequest.request_id == request_id)
-        .first()
+    stmt = select(ProcessedRequest).where(
+        ProcessedRequest.request_id == request_id
     )
+    existing_request = db.scalars(stmt).first()
 
     if existing_request:
         _remember_row_and_conflict(request_id, existing_request, "database")
@@ -134,11 +134,11 @@ async def process_request(
 
     except IntegrityError:
         db.rollback()
-        winner = (
-            db.query(ProcessedRequest)
-            .filter(ProcessedRequest.request_id == request_id)
-            .first()
-        )
+        winner = db.scalars(
+            select(ProcessedRequest).where(
+                ProcessedRequest.request_id == request_id
+            )
+        ).first()
         if winner is None:
             raise create_server_error_exception(
                 "Failed to queue request: unique constraint violation"
