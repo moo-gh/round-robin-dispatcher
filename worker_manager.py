@@ -86,6 +86,7 @@ class WorkerManager:
                 print(f"Worker {worker_id} completed request {request_id}")
 
             except Exception as e:
+                db.rollback()
                 request_record.set_result({"error": str(e)})
                 db.commit()
 
