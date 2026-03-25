@@ -134,11 +134,7 @@ async def process_request(
 
     except IntegrityError:
         db.rollback()
-        winner = db.scalars(
-            select(ProcessedRequest).where(
-                ProcessedRequest.request_id == request_id
-            )
-        ).first()
+        winner = db.scalars(stmt).first()
         if winner is None:
             raise create_server_error_exception(
                 "Failed to queue request: unique constraint violation"
